@@ -8,7 +8,7 @@ RUN apt-get update \
 	&& apt-get install -y --no-install-recommends build-essential ca-certificates git python3 \
 	&& rm -rf /var/lib/apt/lists/*
 
-ARG STRATUM_COMMIT=929acab1ae2fc25fe1d81e581c0450bc76f06731
+ARG STRATUM_COMMIT=b0f9d95f20a7750cb4f223b43a4a43c371c08c77
 RUN set -eux; \
 	git clone https://github.com/dwarner5522/verus-datum-cli /opt/verus-datum-cli; \
 	cd /opt/verus-datum-cli; \

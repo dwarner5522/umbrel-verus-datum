@@ -41,7 +41,7 @@
 				<div class="stat"><span class="stat-title">Network hashrate</span><span class="stat-value" id="stat-network">–</span><span class="stat-unit" id="stat-network-unit">H/s</span></div>
 				<div class="stat"><span class="stat-title">Mining block</span><span class="stat-value" id="stat-height">–</span><span class="stat-unit" id="stat-height-unit">height</span></div>
 				<div class="stat"><span class="stat-title">Time to find a block</span><span class="stat-value" id="stat-time">–</span><span class="stat-unit" id="stat-time-unit">on average</span></div>
-				<div class="stat"><span class="stat-title">Blocks found</span><span class="stat-value" id="stat-blocks">–</span><span class="stat-unit">blocks</span></div>
+				<div class="stat"><span class="stat-title">Blocks found</span><span class="stat-value" id="stat-blocks">–</span><span class="stat-unit" id="stat-blocks-unit">blocks</span></div>
 			</section>
 
 			<div class="columns">
@@ -74,6 +74,30 @@
 				</section>
 			</div>
 
+			<section class="card" id="merge">
+				<h2>Merge mining <span class="count" id="merge-state"></span></h2>
+				<p class="hint">
+					Your miners can mine other chains of the Verus network together with VRSC, with the same hashes and no change on the miners. Each chain switched on here is run by the Verus Node app as a full node of its own: it has to sync first and uses about 1 to 2 GB of memory.
+				</p>
+				<p class="hint state-bad" id="merge-unavailable" hidden></p>
+				<div id="merge-body">
+					<div class="table-scroll">
+						<table>
+							<thead>
+								<tr><th>Chain</th><th>Status</th><th class="num">Height</th><th class="num">Blocks found</th><th>Run chain</th><th>Merge mine</th></tr>
+							</thead>
+							<tbody id="chain-rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+						</table>
+					</div>
+					<p class="hint state-bad" id="merge-result" hidden></p>
+					<dl class="details">
+						<div><dt>In the current work</dt><dd><span id="merge-work">–</span></dd></div>
+						<div><dt>Rewards are paid to</dt><dd><code id="merge-payout">not set</code></dd></div>
+					</dl>
+					<p class="hint">Each chain pays its block reward in its own coin, straight to the payout address. The same R-address works on every chain.</p>
+				</div>
+			</section>
+
 			<section class="card">
 				<h2>Miners <span class="count" id="miner-count"></span></h2>
 				<div class="table-scroll">
@@ -95,6 +119,18 @@
 							<tr><th>Found</th><th class="num">Height</th><th>Miner</th><th class="num">Reward</th><th>Block hash</th></tr>
 						</thead>
 						<tbody id="blocks"><tr><td colspan="5" class="empty">No blocks found yet</td></tr></tbody>
+					</table>
+				</div>
+			</section>
+
+			<section class="card" id="merge-blocks-card" hidden>
+				<h2>Merge-mined blocks found <span class="count" id="merge-block-count"></span></h2>
+				<div class="table-scroll">
+					<table>
+						<thead>
+							<tr><th>Found</th><th>Chain</th><th class="num">Height</th><th class="num">Reward</th><th>Block hash</th></tr>
+						</thead>
+						<tbody id="merge-blocks"></tbody>
 					</table>
 				</div>
 			</section>

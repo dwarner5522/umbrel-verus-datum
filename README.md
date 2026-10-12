@@ -13,6 +13,15 @@ The Umbrel package that uses this image is `dwarner-verus-datum` in [umbrel-app-
 
 The payout address is entered in the dashboard and kept in `/data/settings.json`. The stratum server does not start until there is one. It asks the daemon to pay that address with every request for work and never hands out a block template that pays anywhere else; see the verus-datum-cli README for the details and the one caveat (use one daemon per payout address).
 
+## Merge mining
+
+With `NODE_API_URL` set, the dashboard lists the PBaaS chains (vARRR, vDEX, CHIPS, …) the Verus
+node app can run, with a switch to run each chain and one to merge mine it. The switches are passed
+on to the node app, which owns the chain daemons; this app only shows their state and hands the node
+the payout address when it has none. Merge-mined work needs nothing from the miners: the stratum
+server hands out the work the VRSC daemon builds and submits every share that is good enough for
+any of the chains in it.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -24,6 +33,7 @@ The payout address is entered in the dashboard and kept in `/data/settings.json`
 | `STRATUM_PORT` | `9999` | port the miners connect to |
 | `START_DIFFICULTY` | `8192` | share difficulty a miner starts with; it is then adjusted per miner |
 | `DEVICE_DOMAIN_NAME` | none | hostname shown in the connect details |
+| `NODE_API_URL` | none | address of the [umbrel-verus](https://github.com/dwarner5522/umbrel-verus) dashboard, e.g. `http://verus:3000`. When set, the app shows the PBaaS chains that node can run and switches their merge mining |
 | `PORT` | `3000` | dashboard port |
 
 All state lives in `/data`: `settings.json` (payout address), `stratum.json` (the generated stratum server config, which contains the RPC password) and `blocks.log` (blocks found).

@@ -24,6 +24,8 @@ const config = {
 		user: process.env.DAEMON_RPC_USER || '',
 		password: process.env.DAEMON_RPC_PASS || '',
 	},
+	// The Verus Node app's own API: it runs the PBaaS chain daemons and switches their merge mining.
+	nodeUrl: (process.env.NODE_API_URL || '').replace(/\/+$/, ''),
 	deviceDomainName: process.env.DEVICE_DOMAIN_NAME || '',
 }
 
@@ -43,6 +45,8 @@ const state = {
 	error: null,
 	payoutAddress: null,
 	pool: null,
+	// PBaaS chains as the Verus Node app reports them; available is false when that app is too old or not reachable
+	merge: {available: false, message: 'Merge mining needs the Verus Node app.', payoutAddress: '', chains: []},
 	updatedAt: null,
 }
 
@@ -51,6 +55,7 @@ let child = null
 let shuttingDown = false
 let restartTimer = null
 let pollTimer = null
+let mergeTimer = null
 
 const log = (...args) => console.log(new Date().toISOString(), ...args)
 
@@ -220,6 +225,58 @@ async function poll() {
 }
 
 // ---------------------------------------------------------------------------
+// Merge mining (PBaaS chains run by the Verus Node app)
+
+async function nodeFetch(pathname, body) {
+	const response = await fetch(`${config.nodeUrl}${pathname}`, {
+		method: body ? 'POST' : 'GET',
+		headers: body ? {'content-type': 'application/json'} : {},
+		body: body ? JSON.stringify(body) : undefined,
+		signal: AbortSignal.timeout(8000),
+	})
+	const result = await response.json().catch(() => ({}))
+	if (!response.ok) {
+		const error = new Error(result.error || `HTTP ${response.status}`)
+		error.status = response.status
+		throw error
+	}
+	return result
+}
+
+function setMerge({chains, payoutAddress}) {
+	state.merge = {available: true, message: null, payoutAddress: payoutAddress || '', chains: Array.isArray(chains) ? chains : []}
+}
+
+// Rewards of merge-mined chains are paid by each chain's own daemon, so the node has to know the address.
+// Only fill it in when the node has none: an address chosen in the Verus Node app is left alone.
+async function sharePayoutAddress(force) {
+	if (!config.nodeUrl || !state.payoutAddress || !state.merge.available) return
+	if (state.merge.payoutAddress === state.payoutAddress) return
+	if (state.merge.payoutAddress && !force) return
+	setMerge(await nodeFetch('/api/payout', {address: state.payoutAddress}))
+	log(`Merge mining payout address set to ${state.payoutAddress}`)
+}
+
+let mergePolling = false
+async function pollMerge() {
+	if (!config.nodeUrl || mergePolling || shuttingDown) return
+	mergePolling = true
+	try {
+		setMerge(await nodeFetch('/api/chains'))
+		await sharePayoutAddress(false)
+	} catch (error) {
+		state.merge = {
+			available: false,
+			message: error.status === 404 ? 'Update the Verus Node app to merge mine PBaaS chains.' : 'The Verus Node app is not reachable.',
+			payoutAddress: '',
+			chains: [],
+		}
+	} finally {
+		mergePolling = false
+	}
+}
+
+// ---------------------------------------------------------------------------
 // HTTP
 
 const PUBLIC_DIR = path.join(__dirname, 'public')
@@ -287,6 +344,12 @@ function formatDuration(seconds) {
 	return {text: (seconds / 31557600).toFixed(1), subtext: 'years'}
 }
 
+// VRSC blocks plus the blocks found on merge-mined chains
+function blocksFound(pool) {
+	const merged = state.merge.chains.reduce((sum, chain) => sum + (Number(chain.foundCount) || 0), 0)
+	return pool.blocks.filter((block) => !block.pbaasOnly).length + merged
+}
+
 function widgetStats() {
 	const pool = state.pool
 	const hashrate = formatHashrate(pool?.hashrate.current)
@@ -298,7 +361,7 @@ function widgetStats() {
 		items: [
 			{title: 'Hashrate', text: pool ? hashrate.text : '-', subtext: hashrate.subtext},
 			{title: 'Miners', text: pool ? String(pool.miners.online) : '-', subtext: 'online'},
-			{title: 'Blocks found', text: pool ? String(pool.blocks.length) : '-', subtext: 'blocks'},
+			{title: 'Blocks found', text: pool ? String(blocksFound(pool)) : '-', subtext: 'blocks'},
 			{title: 'Time to block', text: time.text, subtext: time.subtext || 'average'},
 		],
 	}
@@ -347,7 +410,32 @@ const server = http.createServer(async (request, response) => {
 				state.error = null
 				await startStratum()
 			}
+			// the merge-mined chains follow the address chosen here
+			await sharePayoutAddress(true).catch((error) => log('Could not set the merge mining payout address:', error.message))
 			return sendJson(response, 200, {ok: true, payoutAddress: address})
+		}
+		// Switch a PBaaS chain or its merge mining on or off: {"enabled": true} or {"mine": true}
+		const chainPost = request.method === 'POST' && /^\/api\/chains\/([A-Za-z0-9]+)$/.exec(pathname)
+		if (chainPost) {
+			if (!isSameOrigin(request)) return sendJson(response, 403, {error: 'Forbidden'})
+			let patch
+			try {
+				const body = await readJsonBody(request)
+				patch = {enabled: body.enabled, mine: body.mine}
+			} catch (error) {
+				return sendJson(response, 400, {error: error.message})
+			}
+			if (!state.merge.available) return sendJson(response, 409, {error: state.merge.message})
+			if (patch.mine === true && !state.payoutAddress && !state.merge.payoutAddress) {
+				return sendJson(response, 409, {error: 'Enter a payout address first.'})
+			}
+			try {
+				await sharePayoutAddress(false)
+				setMerge(await nodeFetch(`/api/chains/${chainPost[1]}`, patch))
+			} catch (error) {
+				return sendJson(response, error.status >= 400 && error.status < 500 ? error.status : 502, {error: error.message})
+			}
+			return sendJson(response, 200, {ok: true, merge: state.merge})
 		}
 		sendJson(response, 405, {error: 'Method not allowed'})
 	} catch (error) {
@@ -366,6 +454,7 @@ async function shutdown(signal) {
 	state.phase = 'stopping'
 	state.message = 'Shutting down…'
 	clearInterval(pollTimer)
+	clearInterval(mergeTimer)
 	server.close()
 	server.closeAllConnections?.()
 	await stopStratum()
@@ -386,6 +475,10 @@ async function main() {
 	if (state.payoutAddress) await startStratum()
 	else log('No payout address yet, the stratum server starts once one is entered in the app')
 	pollTimer = setInterval(poll, POLL_INTERVAL_MS)
+	if (config.nodeUrl) {
+		pollMerge()
+		mergeTimer = setInterval(pollMerge, POLL_INTERVAL_MS)
+	}
 }
 
 main().catch((error) => {
