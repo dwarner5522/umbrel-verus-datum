@@ -156,9 +156,21 @@ function renderConnect(connect) {
 
 let chainNames = null
 
+const size = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`)
+
 function chainStatus(chain) {
 	if (chain.phase === 'off') return ['Off', '']
+	const bootstrap = chain.bootstrap
+	if (bootstrap) {
+		if (bootstrap.stage === 'downloading' && bootstrap.total) {
+			// never 100% until it is installed
+			const percent = Math.min(Math.floor((bootstrap.received / bootstrap.total) * 1000) / 10, 99.9)
+			return [`Bootstrap ${percent}%`, `${size(bootstrap.received)} of ${size(bootstrap.total)} downloaded`]
+		}
+		return bootstrap.stage === 'installing' ? ['Installing bootstrap', 'Checking the download and moving it into place'] : ['Bootstrap', 'Checking the signature']
+	}
 	if (chain.error) return ['Attention', chain.error]
+	if (chain.bootstrapPending) return ['Bootstrap queued', chain.message || '']
 	if (chain.phase !== 'running' || !chain.node) return [chain.phase === 'waiting' ? 'Waiting' : 'Starting', chain.message || '']
 	const node = chain.node
 	if (!node.synced) {
