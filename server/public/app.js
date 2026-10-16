@@ -169,6 +169,7 @@ function chainStatus(chain) {
 		}
 		return bootstrap.stage === 'installing' ? ['Installing bootstrap', 'Checking the download and moving it into place'] : ['Bootstrap', 'Checking the signature']
 	}
+	if (chain.phase === 'held') return ['Not running', chain.message || '']
 	if (chain.error) return ['Attention', chain.error]
 	if (chain.bootstrapPending) return ['Bootstrap queued', chain.message || '']
 	if (chain.phase !== 'running' || !chain.node) return [chain.phase === 'waiting' ? 'Waiting' : 'Starting', chain.message || '']
